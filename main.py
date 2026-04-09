@@ -1,13 +1,13 @@
 import time, random
-from pypinyin import lazy_pinyin
 from astrbot.api.all import Star, Context, logger
 from astrbot.api.all import Plain, Json, Poke, At, Reply
 from astrbot.api.all import AstrBotConfig, EventMessageType, AstrMessageEvent
 from astrbot.api.event import filter
-from astrbot.core.star.filter.command_group import CommandGroupFilter, CommandFilter
-from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+from .tools import 帮助文本, 获取所有指令
 op = time.perf_counter()
+
+
 class 群自定义规则(Star):
 
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -19,7 +19,7 @@ class 群自定义规则(Star):
         #应有的配置不会少，不要用get来意外修改用户配置，没有就直接错误
         try:
             self.规则列表 = config.get('自定义规则', []) #这个可能没配置列表
-            self.所有指令 = self.获取所有指令()  # 原本重载时也要获取，不冲突
+            self.所有指令 = 获取所有指令(self.config['额外指令'])  # 原本重载时也要获取，不冲突
             self.所有指令集合 = set(self.所有指令)  # 数据量大，用集合提升性能
             self.兜底规则: dict = config['兜底规则']
             self.兜底规则['备注'] = "兜底规则"
@@ -75,7 +75,7 @@ class 群自定义规则(Star):
     @filter.on_astrbot_loaded()
     async def 启动获取所有指令(self):
         """框架初次启动完成时获取所有指令"""
-        self.所有指令 = self.获取所有指令()
+        self.所有指令 = 获取所有指令(self.config['额外指令'])
         self.所有指令集合 = set(self.所有指令)
         logger.info(f"\n\n【群唤醒增强】所有{len(self.所有指令)}个指令：\n{self.所有指令}\n\n")
 
@@ -104,34 +104,14 @@ class 群自定义规则(Star):
                 self.终止事件传播(event, {})
                 return
             else:  # 清理过期数据
-                del self.用户冷却时间[发送者]
+                del self.用户冷却时间[发送者] #异步单线程，直接del即可
 
         规则 = self.获取当前群规(event)
         if not 规则:
             return
 
-        # 只有这样才能获取到带有指令前缀的消息文本
-        消息文本 = next((seg.text for seg in 消息链 if isinstance(seg, Plain)), '').strip()
-        # 处理指令
-        if 消息文本.startswith(self.指令前缀):
-            指令文本 = event.get_message_str().strip().split()
-            if 指令文本:
-                指令文本 = 指令文本[0]
-            else:
-                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了空指令拦截")
-                self.终止事件传播(event, {})
-                return
-            if event.is_admin():
-                if 指令文本 in self.所有指令集合:
-                    return  # 管理员不受影响
-                elif 规则['禁前唤醒']:
-                    logger.info(f"【群唤醒增强】「{规则['备注']}」触发了前缀拦截")
-                    self.终止事件传播(event, 规则)
-                    return
-                return
-            if self.指令屏蔽(指令文本, 规则):
-                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
-                self.终止事件传播(event, 规则)
+        if not event.is_admin() and self.指令屏蔽(event,规则):
+            self.终止事件传播(event,规则)
             return
 
         if isinstance(消息链[0], Json):
@@ -164,6 +144,8 @@ class 群自定义规则(Star):
             else:
                 # 不在活跃期内，清除活跃状态
                 del self.群组活跃时间[群号]; self.群组上次唤醒时间.pop(群号, None)
+
+        消息文本 = event.get_message_str()
 
         # 检查昵称唤醒
         if any(_ in 消息文本 for _ in 规则['昵称唤醒']):
@@ -222,19 +204,15 @@ class 群自定义规则(Star):
             规则 = self.获取当前群规(event)
             if not 规则:
                 return
-            群号 = event.get_group_id()
-            if 规则['禁前唤醒'] and next((seg.text for seg in event.get_messages() if isinstance(seg, Plain)), '').strip().startswith(self.指令前缀):
+            if self.指令屏蔽(event, 规则):
                 event.stop_event()
-                logger.info(f"【群唤醒增强】群{群号}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 拦截了llm唤醒")
-            elif 规则['禁用系统指令'] and event.get_message_str() in self.系统指令:
-                event.stop_event()
-                logger.info(f"【群唤醒增强】群{群号}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 拦截了llm唤醒")
+                logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 触发了指令拦截")
             elif event.get_extra("群唤醒拦截"):
                 event.stop_event()
-                logger.info(f"【群唤醒增强】群{群号}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 拦截了llm唤醒")
+                logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 拦截了llm唤醒")
                 logger.info(f"拦截了此次事件，{event.get_extra("群唤醒拦截")}")
             else:
-                logger.info(f"【群唤醒增强】群{群号}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 唤醒了llm")
+                logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 唤醒了llm")
         except Exception as e:
             logger.error(f"【群唤醒增强】拦截出错：\n{e}", exc_info=True)
 
@@ -313,29 +291,6 @@ class 群自定义规则(Star):
 
         # 处理艾特和引用唤醒
         if 艾特 or 引用:
-            指令文本 = event.get_message_str().strip().split()
-            if 指令文本:
-                指令文本 = 指令文本[0]
-            else:
-                指令文本 = ""
-            if not event.is_admin():
-                # 检查是否为系统指令
-                if 指令文本 in self.系统指令:
-                    if 规则['禁用系统指令']:
-                        if event.is_admin():
-                            return True
-                        self.终止事件传播(event, 规则)
-                        return True
-
-                # 检查指令屏蔽
-                if self.指令屏蔽(指令文本, 规则, 禁前=False):
-                    logger.info(f"【群唤醒增强】「{规则['备注']}」拦截了指令")
-                    self.终止事件传播(event, 规则)
-                    return True
-
-                if 指令文本 in self.所有指令集合:
-                    return True
-
             # 检查各种唤醒条件
             if 规则['引用唤醒'] and 艾特 and 引用:
                 logger.info(f"【群唤醒增强】「{规则['备注']}」触发了艾特引用唤醒")
@@ -363,8 +318,16 @@ class 群自定义规则(Star):
         if 规则['活跃方式'] == "唤醒时":
             self.记录群活跃(event, 规则)
 
-    def 指令屏蔽(self, 指令文本, 规则, 禁前=True) -> bool:
+    def 指令屏蔽(self, event: AstrMessageEvent, 规则) -> bool:
         """检查指令是否被屏蔽"""
+        # 此方法框架自动去除前缀和自身艾特信息
+        指令文本 = event.get_message_str().strip().split()
+        指令文本 = 指令文本[0] if 指令文本 else ""
+
+        使用前缀 = False
+        if next((seg.text for seg in event.get_messages() if isinstance(seg, Plain)), '').strip().startswith(self.指令前缀):
+            使用前缀 = True
+
         # 检查系统指令
         if 规则.get('禁用系统指令') and 指令文本 in self.系统指令:
             return True
@@ -372,7 +335,7 @@ class 群自定义规则(Star):
         # 检查禁用指令列表
         if 规则['禁用的指令']:
             if '0所有' in 规则['禁用的指令']:
-                if 禁前:
+                if 使用前缀:
                     return True
                 elif 指令文本 in self.所有指令集合:
                     return True
@@ -389,7 +352,7 @@ class 群自定义规则(Star):
                 return True
 
         # 检查禁前唤醒
-        if 禁前 and 规则['禁前唤醒'] and (指令文本 not in self.所有指令集合):
+        if 使用前缀 and 规则['禁前唤醒'] and (指令文本 not in self.所有指令集合):
             return True
 
         return False
@@ -405,37 +368,10 @@ class 群自定义规则(Star):
     async def 刷新指令(self, event: AstrMessageEvent):
         """刷新指令"""
         刷新前 = len(self.所有指令)
-        self.所有指令 = self.获取所有指令()
+        self.所有指令 = 获取所有指令(self.config['额外指令'])
         self.所有指令集合 = set(self.所有指令)
         差值 = len(self.所有指令) - 刷新前
         yield event.plain_result(f"✅ 已刷新所有指令，新增{差值}个")
-
-    def 获取所有指令(self) -> list:
-        # 遍历所有注册的处理器获取所有命令，包括别名
-        l指令 = []
-        for handler in star_handlers_registry:
-            for i in handler.event_filters:
-                if isinstance(i, CommandFilter):
-                    l指令.append(i.command_name)
-                    # 获取别名 - 属性名是 alias，类型是 set
-                    if hasattr(i, 'alias') and i.alias:
-                        l指令.extend(list(i.alias))
-                elif isinstance(i, CommandGroupFilter):
-                    l指令.append(i.group_name)
-        所有指令 = list(set(l指令 + self.config['额外指令']))
-        中文指令 = []
-        英文指令 = []
-        for 指令 in 所有指令:
-            if 指令 and '\u4e00' <= 指令[0] <= '\u9fff':
-                中文指令.append(指令)
-            else:
-                英文指令.append(指令)
-        # 排序
-        中文指令.sort(key=lambda x: lazy_pinyin(x))
-        英文指令.sort(key=lambda x: x.lower())
-        # 合并列表
-        所有指令 = 中文指令 + 英文指令
-        return 所有指令
 
     @filter.command("设置群规")
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -524,6 +460,9 @@ class 群自定义规则(Star):
                 if 操作 != "null":
                     yield event.plain_result(f"⚠️ 键「{键}」为浮点数类型，不支持操作参数「{操作}」，已忽略")
                 转换后 = float(值)
+                if 键 == "概率唤醒" and not (0.0 < 转换后 < 1.0):
+                    yield event.plain_result("❌ 值超出范围，概率值应在0~1之间")
+                    return
             elif 原类型 is list:
                 值 = 值.replace("，", ",")
                 if 值.strip() == "":
@@ -551,6 +490,9 @@ class 群自定义规则(Star):
                 if 操作 != "null":
                     yield event.plain_result(f"⚠️ 键「{键}」为字符串类型，不支持操作参数「{操作}」，已忽略")
                 转换后 = 值
+                if 键 == '活跃方式' and 转换后 not in ("唤醒时", "llm请求后", "发送消息后"):
+                        yield event.plain_result("❌ 不支持的值，该键支持的值：唤醒时/llm请求后/发送消息后")
+                        return
             else:
                 yield event.plain_result(f"❌ 不支持的类型: {原类型}")
                 return
@@ -704,6 +646,7 @@ class 群自定义规则(Star):
                 f('持续活跃'),
                 f('活跃间隔'),
                 f('唤醒CD'),
+                f"• 活跃方式：{规则['活跃方式']}",
                 f"• 禁前唤醒：{'✅' if 规则['禁前唤醒'] else '❌'}",
                 f"• 禁用系统指令：{'✅' if 规则['禁用系统指令'] else '❌'}",
                 f"• 禁用的指令：{', '.join(规则['禁用的指令']) or '未配置'}",
@@ -720,59 +663,4 @@ class 群自定义规则(Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     async def 群规帮助(self, event: AstrMessageEvent):
         """显示群自定义规则插件的帮助文档"""
-        帮助文本 = """
-📖 **群自定义规则插件 - 帮助文档**
-
-本插件用于精细控制群聊消息的唤醒与拦截，支持为不同群组配置独立规则。
-
---- 管理员命令 ---
-• `/所有指令` - 查看当前所有可用的机器人指令（含别名）
-• `/刷新指令` - 重新扫描并刷新指令列表（新增插件命令后使用）
-• `/群规则 <群号>` - 查看指定群（或当前群）的规则配置详情
-• `/添加群规 <群号列表> <备注>` - 为群组添加新规则（群号逗号分隔）
-  示例：/添加群规 123456789,987654321 测试群
-• `/设置群规 <键> <值> <群号或"兜底规则">` - 修改指定规则的配置项
-  示例：/设置群规 开关 true
-       /设置群规 昵称唤醒 机器人,AI助手
-       /设置群规 概率唤醒 0.3
-       /设置群规 持续活跃 60
-       /设置群规 禁用的指令 help,status
-       /设置群规 艾特唤醒 false 兜底规则
-
---- 规则配置项说明 ---
-【基础】
-  - 开关 (bool)            : 是否启用该规则
-  - 备注 (str)             : 规则描述
-【唤醒方式】
-  - 昵称唤醒 (list)        : 消息包含关键词即唤醒，如 ["机器人","AI"]
-  - 艾特唤醒 (bool)        : @机器人即唤醒
-  - 引用唤醒 (bool)        : 既@又引用机器人消息才唤醒
-  - 无艾特引用唤醒 (bool)   : 仅引用机器人消息即唤醒
-  - 概率唤醒 (float)       : 0~1，随机概率唤醒
-【拦截条件】
-  - 前缀拦截 (list)        : 消息以指定前缀开头则拦截
-  - 含有拦截 (list)        : 消息包含指定词则拦截
-  - 其余拦截 (bool)        : 未匹配任何唤醒条件时拦截
-  - 拦截json (bool)        : 拦截外部分享的JSON卡片
-  - 拦截戳一戳 (bool)      : 拦截戳一戳消息
-【时间控制】
-  - 持续活跃 (秒)          : 唤醒后群组保持活跃的时间，-1表示使用兜底值
-  - 活跃间隔 (秒)          : 活跃期内两次唤醒的最小间隔
-  - 唤醒CD (秒)            : 单个用户唤醒后的冷却时间，-1使用兜底值
-【指令控制】
-  - 禁前唤醒 (bool)        : 禁止前缀唤醒llm
-  - 禁用系统指令 (bool)    : 禁止使用系统指令（如 /help）
-  - 禁用的指令 (list)      : 黑名单指令，["0所有"]表示禁用所有指令
-  - 启用的指令 (list)      : 白名单指令，["0所有"]表示放行所有指令
-
---- 特殊值说明 ---
-• 兜底规则：未配置自定义规则的群自动生效的规则
-• -1 ：表示继承兜底规则的对应数值（仅适用于时间类配置）
-• 0所有 ：在禁用/启用指令列表中使用，表示全部指令
-• list类型可以使用 add/del/rep 参数
---- 注意事项 ---
-• 管理员不受大部分拦截规则影响
-• 修改配置后立即生效，无需重启
-• 群号参数为字符串，如 "123456789"，兜底规则用 "兜底规则"
-        """.strip()
         yield event.plain_result(帮助文本)

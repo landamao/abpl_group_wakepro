@@ -169,7 +169,7 @@
                         "description": "强力拦截模式",
                         "hint": "是否开启强力拦截模式，不开启可能拦截后仍会被唤醒，开启后百分百拦截",
                         "type": "bool",
-                        "default": false
+                        "default": true
                     }
                 }
             }
@@ -319,7 +319,7 @@
                 "description": "强力拦截模式",
                 "hint": "是否开启强力拦截模式，不开启可能拦截后仍会被唤醒，开启后百分百拦截",
                 "type": "bool",
-                "default": false
+                "default": true
             },
             "备注": {
                 "description": "备注",
