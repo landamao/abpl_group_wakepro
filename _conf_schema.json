@@ -1,0 +1,318 @@
+{
+    "额外指令": {
+            "description": "额外指令",
+            "hint": "针对可能没有扫描的指令，直接填指令名，不用加指令前缀",
+            "type": "list",
+            "default": []
+    },
+    "黑名单群聊": {
+            "description": "黑名单群聊",
+            "hint": "黑名单群聊的消息将全部拦截",
+            "type": "list",
+            "default": []
+    },
+    "自定义规则": {
+        "description": "群聊自定义规则",
+        "type": "template_list",
+        "hint": "为每个群聊配置自定义规则，配置后只有符合以下规则才能唤起bot，未配置的将保持原本的默认配置",
+        "templates": {
+            "自定义": {
+                "name": "规则",
+                "items": {
+                    "备注": {
+                        "description": "备注",
+                        "hint": "用于备注用，日志中将以此备注显示",
+                        "type": "string",
+                        "default": ""
+                    },
+                    "开关": {
+                        "description": "总开关",
+                        "type": "bool",
+                        "default": true
+                    },
+                    "群号": {
+                        "description": "群号",
+                        "hint": "可多个群使用一个配置",
+                        "type": "list",
+                        "default": []
+                    },
+                    "艾特唤醒": {
+                        "description": "艾特唤醒",
+                        "hint": "是否开启唤醒",
+                        "type": "bool",
+                        "default": true
+                    },
+                    "引用唤醒": {
+                        "description": "引用唤醒",
+                        "hint": "当其他人引用了bot的消息时是否唤醒",
+                        "type": "bool",
+                        "default": true
+                    },
+                    "无艾特引用唤醒": {
+                        "description": "无艾特引用唤醒",
+                        "hint": "当其他人引用了bot的消息，却没有艾特bot，时是否唤醒",
+                        "type": "bool",
+                        "default": false
+                    },
+                    "昵称唤醒": {
+                        "description": "昵称唤醒",
+                        "hint": "设置bot的昵称，消息中包含该昵称则唤醒",
+                        "type": "list",
+                        "default": []
+                    },
+                    "概率唤醒": {
+                        "description": "概率唤醒",
+                        "hint": "类似主动回复",
+                        "type": "float",
+                        "slider": {
+                            "min": 0,
+                            "max": 1,
+                            "step": 0.01
+                        },
+                        "default": 0.0
+                    },
+                    "唤醒CD": {
+                        "description": "唤醒冷却时间",
+                        "hint": "当bot被唤醒后，冷却多久，每个用户单独计算，可防止用户疯狂艾特等；；；设置为-1可使用兜底规则，管理员不受影响",
+                        "type": "float",
+                        "slider": {
+                            "min": -1,
+                            "max": 60,
+                            "step": 0.1
+                        },
+                        "default": -1
+                    },
+                    "持续活跃": {
+                        "description": "持续活跃",
+                        "hint": "当bot被唤醒后，持续活跃时间（秒），；；；设置为-1可使用兜底规则",
+                        "type": "float",
+                        "slider": {
+                            "min": -1,
+                            "max": 60,
+                            "step": 0.1
+                        },
+                        "default": -1
+                    },
+                    "活跃间隔": {
+                        "description": "活跃间隔",
+                        "hint": "当bot被唤醒后，持续活跃期间每多少秒最多唤醒一次bot（防止过于频繁唤醒，艾特或引用不影响）；；；设置为-1可使用兜底规则",
+                        "type": "float",
+                        "slider": {
+                            "min": -1,
+                            "max": 60,
+                            "step": 0.1
+                        },
+                        "default": -1
+                    },
+                    "禁用的指令": {
+                        "description": "禁用的指令，此项优先级高于启用的指令",
+                        "hint": "仅禁用的指令，留空则保持默认，填“0所有”则禁用所有，直接填指令名，不用加指令前缀，管理员不受影响",
+                        "type": "list",
+                        "default": []
+                    },
+                    "启用的指令": {
+                        "description": "启用的指令，此项优先级低于禁用的指令",
+                        "hint": "仅启用的指令，留空则保持默认，填“0所有”则启用所有，直接填指令名，不用加指令前缀，管理员不受影响",
+                        "type": "list",
+                        "default": []
+                    },
+                    "禁用系统指令": {
+                        "description": "禁用系统指令",
+                        "hint": "禁止使用系统指令，如/reset，/op，管理员不受影响",
+                        "type": "bool",
+                        "default": false
+                    },
+                    "禁前唤醒": {
+                        "description": "禁止前缀唤醒llm",
+                        "hint": "当用户输入了错误的指令，如“/错误指令”，默认会唤醒llm，启用后禁止唤醒",
+                        "type": "bool",
+                        "default": false
+                    },
+                    "拦截戳一戳": {
+                        "description": "拦截戳一戳事件",
+                        "hint": "是否拦截戳一戳事件",
+                        "type": "bool",
+                        "default": false
+                    },
+                    "前缀拦截": {
+                        "description": "前缀拦截",
+                        "hint": "如果文本以设置的前缀开头，则拦截这条消息",
+                        "type": "list",
+                        "default": []
+                    },
+                    "拦截json": {
+                        "description": "拦截json消息",
+                        "hint": "拦截外部分享，比如快手，哔哩哔哩",
+                        "type": "bool",
+                        "default": false
+                    },
+                    "含有拦截": {
+                        "description": "含有拦截",
+                        "hint": "拦截消息中包含设置的字符的消息",
+                        "type": "list",
+                        "default": []
+                    },
+                    "其余拦截": {
+                        "description": "其余全部拦截",
+                        "hint": "如果以上规则都没有唤醒，其余消息是否拦截，开启后概率唤醒会失效，请谨慎设置",
+                        "type": "bool",
+                        "default": false
+                    },
+                    "强力拦截": {
+                        "description": "强力拦截模式",
+                        "hint": "是否开启强力拦截模式，不开启可能拦截后仍会被唤醒，开启后百分百拦截",
+                        "type": "bool",
+                        "default": false
+                    }
+                }
+            }
+        }
+    },
+    "兜底规则": {
+        "description": "兜底规则",
+        "hint": "是否开启兜底规则，当群聊没有在配置的规则中时，是否使用兜底规则，以下是兜底规则的配置",
+        "type": "object",
+        "items": {
+            "开关": {
+                "description": "兜底规则总开关",
+                "hint": "仅对群聊生效，私聊不生效",
+                "type": "bool",
+                "default": false
+            },
+            "艾特唤醒": {
+                "description": "艾特唤醒",
+                "hint": "是否开启唤醒",
+                "type": "bool",
+                "default": true
+            },
+            "引用唤醒": {
+                "description": "引用唤醒",
+                "hint": "当其他人引用了bot的消息时是否唤醒",
+                "type": "bool",
+                "default": true
+            },
+            "无艾特引用唤醒": {
+                "description": "无艾特引用唤醒",
+                "hint": "当其他人引用了bot的消息，却没有艾特bot，时是否唤醒",
+                "type": "bool",
+                "default": false
+            },
+            "昵称唤醒": {
+                "description": "昵称唤醒",
+                "hint": "设置bot的昵称，消息中包含该昵称则唤醒",
+                "type": "list",
+                "default": []
+            },
+            "概率唤醒": {
+                "description": "概率唤醒",
+                "hint": "类似主动回复",
+                "type": "float",
+                "slider": {
+                    "min": 0,
+                    "max": 1,
+                    "step": 0.01
+                },
+                "default": 0.0
+            },
+            "唤醒CD": {
+                "description": "唤醒冷却时间",
+                "hint": "当bot被唤醒后，冷却多久，每个用户单独计算，可防止用户疯狂艾特等，管理员不受影响",
+                "type": "float",
+                "slider": {
+                    "min": 0,
+                    "max": 60,
+                    "step": 0.1
+                },
+                "default": 2
+            },
+            "持续活跃": {
+                "description": "持续活跃",
+                "hint": "当bot被唤醒后，持续活跃时间（秒），活跃期间每两秒最多唤醒一次bot（防止过于频繁唤醒）",
+                "type": "float",
+                "slider": {
+                    "min": 0,
+                    "max": 60,
+                    "step": 0.1
+                },
+                "default": 6
+            },
+            "活跃间隔": {
+                "description": "活跃间隔",
+                "hint": "当bot被唤醒后，持续活跃期间每多少秒最多唤醒一次bot（防止过于频繁唤醒，艾特或引用不影响）",
+                "type": "float",
+                "slider": {
+                    "min": 0,
+                    "max": 60,
+                    "step": 0.1
+                },
+                "default": 2
+            },
+            "禁用的指令": {
+                "description": "禁用的指令，此项优先级高于启用的指令",
+                "hint": "仅禁用的指令，留空则保持默认，填“0所有”则禁用所有，直接填指令名，不用加指令前缀，管理员不受影响",
+                "type": "list",
+                "default": []
+            },
+            "启用的指令": {
+                "description": "启用的指令，此项优先级低于禁用的指令",
+                "hint": "仅启用的指令，留空则保持默认，填“0所有”则启用所有，直接填指令名，不用加指令前缀，管理员不受影响",
+                "type": "list",
+                "default": []
+            },
+            "禁用系统指令": {
+                "description": "禁用系统指令",
+                "hint": "禁止使用系统指令，如/reset，/op，管理员不受影响",
+                "type": "bool",
+                "default": false
+            },
+            "禁前唤醒": {
+                "description": "禁止前缀唤醒llm",
+                "hint": "当用户输入了错误的指令，如“/错误指令”，默认会唤醒llm，启用后禁止唤醒",
+                "type": "bool",
+                "default": false
+            },
+            "拦截戳一戳": {
+                "description": "拦截戳一戳事件",
+                "hint": "是否拦截戳一戳事件",
+                "type": "bool",
+                "default": false
+            },
+            "前缀拦截": {
+                "description": "前缀拦截",
+                "hint": "如果文本以设置的前缀开头，则拦截这条消息",
+                "type": "list",
+                "default": []
+            },
+            "拦截json": {
+                "description": "拦截json消息",
+                "hint": "拦截外部分享，比如快手，哔哩哔哩",
+                "type": "bool",
+                "default": false
+            },
+            "含有拦截": {
+                "description": "含有拦截",
+                "hint": "拦截消息中包含设置的字符的消息",
+                "type": "list",
+                "default": []
+            },
+            "其余拦截": {
+                "description": "其余全部拦截",
+                "hint": "如果以上规则都没有通过，其余消息是否拦截，请谨慎设置",
+                "type": "bool",
+                "default": false
+            },
+            "强力拦截": {
+                "description": "强力拦截模式",
+                "hint": "是否开启强力拦截模式，不开启可能拦截后仍会被唤醒，开启后百分百拦截",
+                "type": "bool",
+                "default": false
+            },
+            "备注": {
+                "description": "备注",
+                "hint": "此项修改没用",
+                "type": "string",
+                "default": ""
+            }
+        }
+    }
+}
