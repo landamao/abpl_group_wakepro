@@ -59,7 +59,7 @@ class 群自定义规则(Star):
         for i, j in self.群组活跃间隔.items():
             if j == -1:
                 self.群组活跃间隔[i] = self.兜底规则['活跃间隔']
-
+        #框架无API获取
         self.系统指令 = {'alter_cmd', 'dashboard_update', 'del', 'deop', 'dwl', 'groupnew', 'help', 'history', 'key',
                          'llm', 'ls', 'model', 'new', 'op', 'persona', 'provider', 'rename', 'reset', 'sid', 'switch',
                          't2i', 'tts', 'wl'}
@@ -504,8 +504,7 @@ class 群自定义规则(Star):
         # 5. 赋值并保存配置
         规则[键] = 转换后
         self.config.save_config()
-        if 键 == "群号":
-            self._重建规则索引()
+        self._重建规则索引()
 
         输出行 = [f"✅ 已更新 {来源} 的规则：{键} = {转换后}"]
         if 操作 in ('add', 'del', 'rep') and 原类型 is list:
