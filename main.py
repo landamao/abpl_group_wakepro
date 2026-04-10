@@ -504,7 +504,8 @@ class 群自定义规则(Star):
         # 5. 赋值并保存配置
         规则[键] = 转换后
         self.config.save_config()
-        # 不需要重建索引
+        if 键 == "群号":
+            self._重建规则索引()
 
         输出行 = [f"✅ 已更新 {来源} 的规则：{键} = {转换后}"]
         if 操作 in ('add', 'del', 'rep') and 原类型 is list:

@@ -259,7 +259,7 @@
                 "hint": "详见说明文档",
                 "type": "string",
                 "options": ["唤醒时", "llm请求后", "发送消息后"],
-                "default": "llm请求后"
+                "default": "发送消息后"
             },
             "禁用的指令": {
                 "description": "禁用的指令，此项优先级高于启用的指令",
