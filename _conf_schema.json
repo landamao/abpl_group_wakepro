@@ -21,7 +21,7 @@
                 "items": {
                     "备注": {
                         "description": "备注",
-                        "hint": "用于备注用，日志中将以此备注显示",
+                        "hint": "规则的唯一标识，日志中将以此备注显示",
                         "type": "string",
                         "default": ""
                     },
@@ -109,7 +109,7 @@
                         "hint": "详见说明文档",
                         "type": "string",
                         "options": ["唤醒时", "llm请求后", "发送消息后"],
-                        "default": "llm请求后"
+                        "default": "发送消息后"
                     },
                     "禁用的指令": {
                         "description": "禁用的指令，此项优先级高于启用的指令",

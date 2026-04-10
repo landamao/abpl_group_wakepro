@@ -1,9 +1,10 @@
 import time, random
-from astrbot.api.all import Star, Context, logger
-from astrbot.api.all import Plain, Json, Poke, At, Reply
-from astrbot.api.all import AstrBotConfig, EventMessageType, AstrMessageEvent
+from astrbot.api.all import (
+    Star, Context, logger,
+    Plain, Json, Poke, At, Reply,
+    AstrBotConfig, AstrMessageEvent
+)
 from astrbot.api.event import filter
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
 from .tools import 帮助文本, 获取所有指令
 op = time.perf_counter()
 
@@ -79,7 +80,7 @@ class 群自定义规则(Star):
         self.所有指令集合 = set(self.所有指令)
         logger.info(f"\n\n【群唤醒增强】所有{len(self.所有指令)}个指令：\n{self.所有指令}\n\n")
 
-    @filter.event_message_type(EventMessageType.GROUP_MESSAGE, priority=6666)
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=6666)
     async def 入口(self, event: AstrMessageEvent):
         """消息主入口"""
         if not (消息链:=event.get_messages()):
@@ -521,7 +522,7 @@ class 群自定义规则(Star):
 
     @filter.command("添加群规")
     @filter.permission_type(filter.PermissionType.ADMIN)
-    async def 添加群规(self, event: AiocqhttpMessageEvent, 群号: str=None, 备注: str = None):
+    async def 添加群规(self, event: AstrMessageEvent, 群号: str=None, 备注: str = None):
         """为指定群号添加新的自定义规则。
         用法：/添加群规 <群号列表（用逗号分隔）> [备注]
         示例：
@@ -559,13 +560,12 @@ class 群自定义规则(Star):
         新规则['群号'] = 群号列表
         if not 备注 and len(群号列表) == 1:
             try:
-                备注 = (await event.bot.get_group_info(group_id=int(群号列表[0])))['group_name']
-                新规则['备注'] = 备注
+                备注 = (await event.get_group(群号列表[0])).group_name
             except Exception as e:
                 logger.warning(e, exc_info=True)
-                新规则['备注'] = f"群 {','.join(群号列表)} 的自定义规则"
-        else:
-            新规则['备注'] = 备注
+            if not 备注:
+                备注 = f"群 {'，'.join(群号列表)} 的自定义规则"
+        新规则['备注'] = 备注
 
         # 添加到配置
         规则列表 = self.config.get('自定义规则', [])
@@ -585,6 +585,9 @@ class 群自定义规则(Star):
         """重新构建规则索引和群组活跃间隔映射（供内部调用）"""
         self.规则索引.clear()
         self.群组活跃间隔.clear()
+        self.规则列表 = self.config.get('自定义规则', [])
+        if not self.规则列表:
+            return
         for 索引, 规则 in enumerate(self.规则列表):
             规则['群号'] = [j.strip() for j in 规则['群号']]
             for 群号 in 规则['群号']:
@@ -609,6 +612,10 @@ class 群自定义规则(Star):
                 yield event.plain_result("❌ 请在群里中使用或传入群号参数")
                 return
         群号 = str(群号).strip()
+
+        if not self.规则列表 and 群号 != "兜底规则":
+            yield event.plain_result("⚠️ 你还没有配置任何自定义规则")
+            return
 
         # 查找规则
         if 群号 in self.规则索引:
@@ -658,6 +665,90 @@ class 群自定义规则(Star):
                 输出行.append(f"• 还有群{规则['群号']}也使用了此规则")
 
         yield event.plain_result('\n'.join(输出行))
+
+    @filter.command("删除群规")
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    async def 删除群规(self, event: AstrMessageEvent, 群号: str = None):
+        """删除指定群号的自定义规则，或从多群号规则中移除该群。
+        用法：/删除群规 <群号>  或  /删除群规 无  （确认删除空规则）
+        示例：
+            /删除群规 123456789        # 从规则中移除群123456789，若规则无群号则变为“无”
+            /删除群规 无               # 永久删除群号列表为“无”的空规则
+        """
+        # 解析目标群号
+        if 群号 is None:
+            if not (群号 := event.get_group_id()):
+                yield event.plain_result("❌ 请在群聊中使用，或通过参数指定群号")
+                return
+        群号 = str(群号).strip()
+
+        # 禁止删除兜底规则
+        if 群号 == "兜底规则":
+            yield event.plain_result("❌ 兜底规则不可删除，如需关闭请使用 /设置群规 开关 off 兜底规则")
+            return
+
+        # 查找包含该群号的规则
+        规则列表 = self.config.get('自定义规则', [])
+        if not 规则列表:
+            yield event.plain_result("⚠️ 你还没有配置任何自定义规则")
+            return
+        目标规则 = None
+        目标索引 = -1
+        for idx, 规则 in enumerate(规则列表):
+            if 群号 in 规则['群号']:
+                目标规则 = 规则
+                目标索引 = idx
+                break
+
+        if 目标规则 is None:
+            yield event.plain_result(f"❌ 未找到群 {群号} 的自定义规则")
+            return
+
+        当前群号列表 = 目标规则['群号']
+
+        # 特殊情况：正在删除占位符 "无" 本身，确认后永久删除规则
+        if 群号 == "无":
+            # 移除整条规则
+            被删规则 = 规则列表.pop(目标索引)
+            self.config['自定义规则'] = 规则列表
+            self.config.save_config()
+            # 清理关联群号的运行时状态（实际上应该没有有效群号了）
+            for gid in 被删规则['群号']:
+                if gid != "无":
+                    self.群组活跃时间.pop(gid, None)
+                    self.群组上次唤醒时间.pop(gid, None)
+                    self.群组活跃间隔.pop(gid, None)
+            self._重建规则索引()
+            yield event.plain_result(f"✅ 已永久删除空规则（原备注：{被删规则['备注']}）")
+            return
+
+        # 正常删除群号：从群号列表中移除该群
+        新群号列表 = [g for g in 当前群号列表 if g != 群号]
+
+        # 清理该群的运行时状态
+        self.群组活跃时间.pop(群号, None)
+        self.群组上次唤醒时间.pop(群号, None)
+        self.群组活跃间隔.pop(群号, None)
+
+        if 新群号列表:  # 规则还有其他群号，仅更新列表
+            目标规则['群号'] = 新群号列表
+            self.config.save_config()
+            self._重建规则索引()
+            剩余群 = '、'.join(新群号列表)
+            yield event.plain_result(
+                f"✅ 已将群 {群号} 从规则中移除。\n"
+                f"规则仍绑定群号：{剩余群}\n"
+                f"备注：{目标规则.get('备注', '无')}"
+            )
+        else:
+            # 群号列表为空，将其置为占位符 "无"
+            目标规则['群号'] = ["无"]
+            self.config.save_config()
+            self._重建规则索引()
+            yield event.plain_result(
+                f"⚠️ 已从规则「{目标规则['备注']}」移除群{群号}，该规则已无绑定群号。\n"
+                f"若确认不再需要，请执行 `/删除群规 无`，以永久删除。"
+            )
 
     @filter.command("群规帮助")
     @filter.permission_type(filter.PermissionType.ADMIN)
