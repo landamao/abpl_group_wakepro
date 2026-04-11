@@ -196,10 +196,6 @@ class 群自定义规则(Star):
     async def llm请求前(self, event: AstrMessageEvent, _):
         """兜底拦截"""
         try:
-            # if next((seg.text for seg in event.get_messages() if isinstance(seg, Plain)), '').strip().startswith(self.指令前缀):
-            #     logger.info(f"【群唤醒增强】用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 指令拦截")
-            #     event.stop_event()
-            #     return
             规则 = self.获取当前群规(event)
             if not 规则:
                 return
@@ -216,7 +212,7 @@ class 群自定义规则(Star):
             elif event.get_extra("群唤醒拦截"):
                 event.stop_event()
                 logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 拦截了llm唤醒")
-                logger.info(f"拦截了此次事件，{event.get_extra("群唤醒拦截")}")
+                logger.info(f"拦截了此次事件，{event.get_extra('群唤醒拦截')}")
             else:
                 logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 唤醒了llm")
         except Exception as e:

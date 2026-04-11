@@ -2,6 +2,6 @@ name: astrbot_plugin_group_wakepro
 display_name: 群唤醒增强
 desc: 为每个群聊配置独立的唤醒规则，支持指令拦截，持续活跃，无艾特的引用拦截等见文档
 help: 为每个群聊配置独立的唤醒规则
-version: v8.7.0
+version: v8.7.1
 author: 懒大猫
 repo: https://github.com/landamao/abpl_group_wakepro
