@@ -1,13 +1,13 @@
-import time, random
+import time
 from astrbot.api.all import (
     Star, Context, logger,
     Plain, Json, Poke, At, Reply,
     AstrBotConfig, AstrMessageEvent
 )
 from astrbot.api.event import filter
-from .tools import 帮助文本, 获取所有指令
+from .RulesClass import *
+from .tools import 帮助文本, 获取所有指令, 概率通过
 op = time.perf_counter()
-
 
 class 群自定义规则(Star):
 
@@ -19,29 +19,22 @@ class 群自定义规则(Star):
         # ======获取配置======
         #应有的配置不会少，不要用get来意外修改用户配置，没有就直接错误
         try:
-            self.规则列表 = config.get('自定义规则', []) #这个可能没配置列表
+            self.规则列表:list[自定义规则] = config.get('自定义规则', []) #这个可能未添加条目
             self.所有指令 = 获取所有指令(self.config['额外指令'])  # 原本重载时也要获取，不冲突
             self.所有指令集合 = set(self.所有指令)  # 数据量大，用集合提升性能
-            self.兜底规则: dict = config['兜底规则']
+            self.兜底规则: 兜底规则 = config['兜底规则']
             self.兜底规则['备注'] = "兜底规则"
             self.兜底开关 = self.兜底规则['开关']
             self.黑名单群聊 = [i.strip() for i in config['黑名单群聊']]
             config['黑名单群聊'] = self.黑名单群聊
         except Exception as e:
-            logger.critical(f"【群唤醒增强】获取配置失败，请重新安装插件，或联系开发者\n错误信息：{str(e)}", exc_info=True)
-            raise RuntimeError
+            logger.critical(f"【群唤醒增强】获取配置出错，请尝试点击插件配置然后直接保存，或重新安装插件，或联系开发者\n{str(e)}", exc_info=True)
         # ======获取系统配置======
         try:
             self.指令前缀 = tuple(context.get_config()["wake_prefix"])
         except Exception as e:
-            logger.error(f"【群唤醒增强】获取指令前缀失败，使用默认值 '/': {e}")
+            logger.error(f"【群唤醒增强】获取指令前缀失败，你可在代码里手动设置，使用默认值 '/': {e}")
             self.指令前缀 = ("/",)
-
-        try:
-            self.管理员列表 = context.get_config()["admins_id"]
-        except Exception as e:
-            logger.error("【群唤醒增强】获取管理员列表失败，你可在代码中手动配置管理员，错误信息：\n" + str(e))
-            self.管理员列表 = []
 
         logger.info(f"【群唤醒增强】所有{len(self.所有指令)}个指令：\n{self.所有指令}")
 
@@ -94,9 +87,31 @@ class 群自定义规则(Star):
         当前时间 = time.time()
 
         if 群号 in self.黑名单群聊:
-            if event.is_admin():
-                return
             self.终止事件传播(event, {})
+            return
+
+        规则 = self.获取当前群规(event)
+        if not 规则:
+            return
+
+        终止, ret = self.指令屏蔽(event, 规则)
+        if 终止 and not event.is_admin():
+            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
+            self.终止事件传播(event,规则)
+            return
+        if ret:
+            return
+
+        if isinstance(消息链[0], Json):
+            if 规则['拦截json']:
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了json拦截（外部分享）")
+                self.终止事件传播(event, 规则)
+                return
+
+        if isinstance(消息链[0], Poke):
+            if 规则['拦截戳一戳']:
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了戳一戳拦截")
+                self.终止事件传播(event, 规则)
             return
 
         if 发送者 in self.用户冷却时间 and not event.is_admin():
@@ -106,26 +121,6 @@ class 群自定义规则(Star):
                 return
             else:  # 清理过期数据
                 del self.用户冷却时间[发送者] #异步单线程，直接del即可
-
-        规则 = self.获取当前群规(event)
-        if not 规则:
-            return
-
-        if not event.is_admin() and self.指令屏蔽(event,规则):
-            self.终止事件传播(event,规则)
-            return
-
-        if isinstance(消息链[0], Json):
-            if 规则['拦截json']:
-                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了json拦截（外部分享）")
-                self.终止事件传播(event, 规则)
-            return
-
-        if isinstance(消息链[0], Poke):
-            if 规则['拦截戳一戳']:
-                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了戳一戳拦截")
-                self.终止事件传播(event, 规则)
-            return
 
         # 检查是否在活跃期内且满足2秒间隔
         if 群号 in self.群组活跃时间:
@@ -168,30 +163,33 @@ class 群自定义规则(Star):
             return
 
         # 检查其余拦截
-        if 规则['其余拦截']:
+        if 规则['其余拦截']:  #管理员不拦截，与前黑名单列表相对
+            if event.is_admin():
+                return
             logger.info(f"【群唤醒增强】「{规则['备注']}」触发了其余拦截")
             self.终止事件传播(event, 规则)
             return
 
         # 检查概率唤醒
-        if 规则['概率唤醒'] and random.random() < 规则['概率唤醒']:
-            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了概率唤醒")
-            self.唤醒(event, 规则)
-            return
+        if 规则['概率唤醒']:
+            if 概率通过(消息链, 规则['概率唤醒'], 规则['概率方式']):
+                self.唤醒(event, 规则)
+
         return
 
-    def 获取当前群规(self, event: AstrMessageEvent) -> dict|None:
+    def 获取当前群规(self, event: AstrMessageEvent) -> 自定义规则|兜底规则|None:
         群号 = event.get_group_id()
         if not 群号:
             return None
-        规则 = None
         if 群号 in self.规则索引:
-            规则 = self.规则列表[self.规则索引[群号]]
+            规则:自定义规则 = self.规则列表[self.规则索引[群号]]
             #没开启直接不处理也不使用兜底规则
             if not 规则['开关']:
                 return None
         elif self.兜底开关:
-            规则 = self.兜底规则
+            规则:兜底规则 = self.兜底规则
+        else:
+            return None
         return 规则
 
     @filter.on_llm_request(priority=66666)
@@ -205,9 +203,16 @@ class 群自定义规则(Star):
             规则 = self.获取当前群规(event)
             if not 规则:
                 return
-            if self.指令屏蔽(event, 规则):
-                event.stop_event()
+            if not 规则['强力拦截']:
+                return
+            终止, ret = self.指令屏蔽(event, 规则)
+            if 终止 and not event.is_admin():
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
+                self.终止事件传播(event, 规则)
                 logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 触发了指令拦截")
+                return
+            if ret:
+                return
             elif event.get_extra("群唤醒拦截"):
                 event.stop_event()
                 logger.info(f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 拦截了llm唤醒")
@@ -257,26 +262,14 @@ class 群自定义规则(Star):
             self.群组活跃时间[event.get_group_id()] = 当前时间 + 持续活跃时间
             self.群组上次唤醒时间[event.get_group_id()] = 当前时间
 
-        # 设置用户冷却时间
-        if event.is_admin():
-            return
-
-        唤醒CD = 规则['唤醒CD']
-        if 唤醒CD == -1:
-            唤醒CD = self.兜底规则['唤醒CD']
-
-        if 唤醒CD > 0:
-            self.用户冷却时间[event.get_sender_id()] = 当前时间 + 唤醒CD
-            logger.info(f"【群唤醒增强】用户「{event.get_sender_name()}（{event.get_sender_id()}）」将冷却{唤醒CD}秒")
-
     @staticmethod
-    def 终止事件传播(event: AstrMessageEvent, 规则:dict):
+    def 终止事件传播(event: AstrMessageEvent, 规则:Rule):
         if 规则.get('强力拦截', False):
             event.set_extra("群唤醒拦截", True)
         logger.info(f"【群唤醒增强】「{规则.get('备注', event.get_group_id())}」终止了事件传播")
         event.stop_event()
 
-    def 处理艾特引用(self, event: AstrMessageEvent, 规则) -> bool:
+    def 处理艾特引用(self, event: AstrMessageEvent, 规则:Rule) -> bool:
         """返回值决定调用后上一级是否也return"""
         艾特 = False
         引用 = False
@@ -319,11 +312,24 @@ class 群自定义规则(Star):
         if 规则['活跃方式'] == "唤醒时":
             self.记录群活跃(event, 规则)
 
-    def 指令屏蔽(self, event: AstrMessageEvent, 规则) -> bool:
-        """检查指令是否被屏蔽"""
+        # 设置用户冷却时间
+        if event.is_admin():
+            return
+
+        唤醒CD = 规则['唤醒CD']
+        if 唤醒CD == -1:
+            唤醒CD = self.兜底规则['唤醒CD']
+
+        if 唤醒CD > 0:
+            self.用户冷却时间[event.get_sender_id()] = time.time() + 唤醒CD
+            logger.info(f"【群唤醒增强】用户「{event.get_sender_name()}（{event.get_sender_id()}）」将冷却{唤醒CD}秒")
+
+    def 指令屏蔽(self, event: AstrMessageEvent, 规则) -> tuple[bool, bool]:
+        """检查指令是否被屏蔽，return终止，return"""
         # 此方法框架自动去除前缀和自身艾特信息
         指令文本 = event.get_message_str().strip().split()
         指令文本 = 指令文本[0] if 指令文本 else ""
+        ret = 指令文本 in self.所有指令集合
 
         使用前缀 = False
         if next((seg.text for seg in event.get_messages() if isinstance(seg, Plain)), '').strip().startswith(self.指令前缀):
@@ -331,32 +337,32 @@ class 群自定义规则(Star):
 
         # 检查系统指令
         if 规则.get('禁用系统指令') and 指令文本 in self.系统指令:
-            return True
+            return True, ret
 
         # 检查禁用指令列表
         if 规则['禁用的指令']:
             if '0所有' in 规则['禁用的指令']:
                 if 使用前缀:
-                    return True
+                    return True, ret
                 elif 指令文本 in self.所有指令集合:
-                    return True
+                    return True, ret
                 else:
-                    return False
+                    return False, ret
             elif 指令文本 in 规则['禁用的指令']:
-                return True
+                return True, ret
 
         # 检查启用指令列表
         if 规则['启用的指令']:
             if '0所有' in 规则['启用的指令']:
-                return False
+                return False, ret
             elif 指令文本 not in 规则['启用的指令']:
-                return True
+                return True, ret
 
         # 检查禁前唤醒
         if 使用前缀 and 规则['禁前唤醒'] and (指令文本 not in self.所有指令集合):
-            return True
+            return True, ret
 
-        return False
+        return False, ret
 
     @filter.command("所有指令")
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -379,6 +385,7 @@ class 群自定义规则(Star):
     async def 设置群规(self, event: AstrMessageEvent, 键: str, 值: str, 群号: str = None, 操作: str = "null"):
         """设置群规配置项，用法：/设置群规 <键> <值> [群号] [操作]
         操作参数仅对列表类型有效：add(追加，默认)、del(删除)、rep(替换)
+        列表值使用逗号分割多个值
         示例：
             /设置群规 开关 on
             /设置群规 昵称唤醒 机器人,AI
@@ -472,6 +479,12 @@ class 群自定义规则(Star):
                     新列表 = [item.strip() for item in 值.split(',') if item.strip()]
                 实际操作 = "add" if 操作 == "null" else 操作
                 if 实际操作 == "add":
+                    if 键 == '概率方式':
+                        活跃方式 = ["纯文本", "卡片分享", "图片", "任何消息"]
+                        not_exist = [x for x in 新列表 if x not in 活跃方式]
+                        if not_exist:
+                            yield event.plain_result(f"❌ 不支持的值：{'，'.join(not_exist)}\n\n支持的有：{'，'.join(活跃方式)}")
+                            return
                     转换后 = 原值 + 新列表
                     # 去重保留顺序
                     转换后 = list(dict.fromkeys(转换后))
@@ -633,9 +646,9 @@ class 群自定义规则(Star):
 
         def f(键) -> str:
             if 规则[键] == -1:
-                return f"• {键}：{self.兜底规则[键]}秒（使用兜底值）"
+                return f"• {键}：{self.兜底规则[键]}秒（使用兜底值）" # type: ignore
             else:
-                return f"• {键}：{规则[键]}秒"
+                return f"• {键}：{规则[键]}秒" # type: ignore
 
         # 格式化输出
         输出行 = [f"📋 群 {群号} 的规则配置（{来源}）", f"• 备注：{规则['备注']}",
@@ -747,7 +760,8 @@ class 群自定义规则(Star):
             self._重建规则索引()
             yield event.plain_result(
                 f"⚠️ 已从规则「{目标规则['备注']}」移除群{群号}，该规则已无绑定群号。\n"
-                f"若确认不再需要，请执行 `/删除群规 无`，删除整条规则"
+                f"若确认不再需要，请执行 `/删除群规 无`，删除整条规则\n"
+                f"可使用`/设置群规 群号 {群号} 无 rep`以恢复"
             )
 
     @filter.command("群规帮助")

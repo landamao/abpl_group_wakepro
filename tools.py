@@ -1,6 +1,8 @@
+import random
 from pypinyin import lazy_pinyin
-from astrbot.core.star.filter.command_group import CommandGroupFilter, CommandFilter
+from astrbot.api.all import Plain, Json, Image
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.star.filter.command_group import CommandGroupFilter, CommandFilter
 
 
 def 获取所有指令(额外指令) -> list:
@@ -30,7 +32,34 @@ def 获取所有指令(额外指令) -> list:
     所有指令 = 中文指令 + 英文指令
     return 所有指令
 
+_类型映射 = {
+    '纯文本': Plain,
+    '图片': Image,
+    '卡片分享': Json,
+}
 
+def 概率通过(消息链, 概率值, 启用列表) -> bool:
+    """检查概率及类型是否通过概率唤醒"""
+    if random.random() >= 概率值:
+        return False
+    if '任何消息' in 启用列表:
+        return True
+
+    #优化算法
+    # 提取对应的类型，组成元组
+    启用类型列表 = tuple(_类型映射[类型文本] for 类型文本 in 启用列表 if 类型文本 in _类型映射)
+
+    if not 启用类型列表:
+        return False
+
+    # 特殊规则：仅纯文本时要求严格单条消息
+    if 启用类型列表 == (Plain,):
+        return len(消息链) == 1 and isinstance(消息链[0], Plain)
+
+    for seg in 消息链:
+        if isinstance(seg, 启用类型列表):
+            return True
+    return False
 
 帮助文本 = """
 📖 **群自定义规则插件 - 帮助文档**
@@ -62,6 +91,7 @@ def 获取所有指令(额外指令) -> list:
   - 引用唤醒 (bool)        : 既@又引用机器人消息才唤醒
   - 无艾特引用唤醒 (bool)   : 仅引用机器人消息即唤醒
   - 概率唤醒 (float)       : 0~1，随机概率唤醒
+  - 概率方式 (list)        : 概率唤醒的方式，可选值有：纯文本/卡片分享/图片/任何消息
 【拦截条件】
   - 前缀拦截 (list)        : 消息以指定前缀开头则拦截
   - 含有拦截 (list)        : 消息包含指定词则拦截

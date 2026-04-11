@@ -38,19 +38,19 @@
                     },
                     "艾特唤醒": {
                         "description": "艾特唤醒",
-                        "hint": "是否开启唤醒",
+                        "hint": "是否开启艾特唤醒，关闭则禁用艾特唤醒",
                         "type": "bool",
                         "default": true
                     },
                     "引用唤醒": {
                         "description": "引用唤醒",
-                        "hint": "当其他人引用了bot的消息时是否唤醒",
+                        "hint": "当其他人引用了bot的消息并且艾特了时是否唤醒，关闭则禁用引用唤醒",
                         "type": "bool",
                         "default": true
                     },
                     "无艾特引用唤醒": {
                         "description": "无艾特引用唤醒",
-                        "hint": "当其他人引用了bot的消息，却没有艾特bot，时是否唤醒",
+                        "hint": "当其他人引用了bot的消息，却没有艾特bot，时是否唤醒，关闭则禁用无艾特引用唤醒",
                         "type": "bool",
                         "default": false
                     },
@@ -59,17 +59,6 @@
                         "hint": "设置bot的昵称，消息中包含该昵称则唤醒",
                         "type": "list",
                         "default": []
-                    },
-                    "概率唤醒": {
-                        "description": "概率唤醒",
-                        "hint": "类似主动回复",
-                        "type": "float",
-                        "slider": {
-                            "min": 0,
-                            "max": 1,
-                            "step": 0.01
-                        },
-                        "default": 0.0
                     },
                     "唤醒CD": {
                         "description": "唤醒冷却时间",
@@ -155,7 +144,7 @@
                     },
                     "含有拦截": {
                         "description": "含有拦截",
-                        "hint": "拦截消息中包含设置的字符的消息",
+                        "hint": "拦截消息中包含设置的字符的消息，可配置为http以拦截链接消息",
                         "type": "list",
                         "default": []
                     },
@@ -164,6 +153,24 @@
                         "hint": "如果以上规则都没有唤醒，其余消息是否拦截，开启后概率唤醒会失效，请谨慎设置",
                         "type": "bool",
                         "default": false
+                    },
+                    "概率唤醒": {
+                        "description": "概率唤醒",
+                        "hint": "类似主动回复，此项为最低优先级，即只有前面所有通过了，才会到这里",
+                        "type": "float",
+                        "slider": {
+                            "min": 0,
+                            "max": 1,
+                            "step": 0.01
+                        },
+                        "default": 0.0
+                    },
+                    "概率方式": {
+                        "description": "概率唤醒触发方式",
+                        "hint": "详见说明文档",
+                        "type": "list",
+                        "options": ["纯文本", "卡片分享", "图片", "任何消息"],
+                        "default": ["纯文本"]
                     },
                     "强力拦截": {
                         "description": "强力拦截模式",
@@ -188,19 +195,19 @@
             },
             "艾特唤醒": {
                 "description": "艾特唤醒",
-                "hint": "是否开启唤醒",
+                "hint": "是否开启艾特唤醒，关闭则禁用艾特唤醒",
                 "type": "bool",
                 "default": true
             },
             "引用唤醒": {
                 "description": "引用唤醒",
-                "hint": "当其他人引用了bot的消息时是否唤醒",
+                "hint": "当其他人引用了bot的消息并且艾特了时是否唤醒，关闭则禁用引用唤醒",
                 "type": "bool",
                 "default": true
             },
             "无艾特引用唤醒": {
                 "description": "无艾特引用唤醒",
-                "hint": "当其他人引用了bot的消息，却没有艾特bot，时是否唤醒",
+                "hint": "当其他人引用了bot的消息，却没有艾特bot，时是否唤醒，关闭则禁用无艾特引用唤醒",
                 "type": "bool",
                 "default": false
             },
@@ -209,17 +216,6 @@
                 "hint": "设置bot的昵称，消息中包含该昵称则唤醒",
                 "type": "list",
                 "default": []
-            },
-            "概率唤醒": {
-                "description": "概率唤醒",
-                "hint": "类似主动回复",
-                "type": "float",
-                "slider": {
-                    "min": 0,
-                    "max": 1,
-                    "step": 0.01
-                },
-                "default": 0.0
             },
             "唤醒CD": {
                 "description": "唤醒冷却时间",
@@ -305,7 +301,7 @@
             },
             "含有拦截": {
                 "description": "含有拦截",
-                "hint": "拦截消息中包含设置的字符的消息",
+                "hint": "拦截消息中包含设置的字符的消息，可配置为http以拦截链接消息",
                 "type": "list",
                 "default": []
             },
@@ -314,6 +310,24 @@
                 "hint": "如果以上规则都没有通过，其余消息是否拦截，请谨慎设置",
                 "type": "bool",
                 "default": false
+            },
+            "概率唤醒": {
+                "description": "概率唤醒",
+                "hint": "类似主动回复，此项为最低优先级，即只有前面所有通过了，才会到这里",
+                "type": "float",
+                "slider": {
+                    "min": 0,
+                    "max": 1,
+                    "step": 0.01
+                },
+                "default": 0.0
+            },
+            "概率方式": {
+                "description": "概率唤醒触发方式",
+                "hint": "详见说明文档",
+                "type": "list",
+                "options": ["纯文本", "卡片分享", "图片", "任何消息"],
+                "default": ["纯文本"]
             },
             "强力拦截": {
                 "description": "强力拦截模式",
