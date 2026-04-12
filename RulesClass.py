@@ -7,7 +7,7 @@ __all__ = [
     "Rule",
 ]
 
-class BaseRule(TypedDict, total=False):
+class BaseRule(TypedDict, total=True):
     """所有规则共有的字段（开关、唤醒、拦截、时间等）"""
     # 基础
     开关: bool
@@ -33,6 +33,7 @@ class BaseRule(TypedDict, total=False):
     持续活跃: float              # 秒，-1 表示继承兜底值
     活跃间隔: float              # 秒，-1 表示继承兜底值
     活跃方式: str                # "唤醒时" / "llm请求后" / "发送消息后"
+    活跃范围: str                # "群聊级" / "用户级"
 
     # 指令控制
     禁用的指令: List[str]        # 可包含 "0所有"
@@ -44,12 +45,12 @@ class BaseRule(TypedDict, total=False):
     强力拦截: bool
 
 
-class 自定义规则(BaseRule, total=False):
+class 自定义规则(BaseRule, total=True):
     """自定义规则（包含群号列表）"""
     群号: List[str]              # 必填，实际配置中一定存在
 
 
-class 兜底规则(BaseRule, total=False):
+class 兜底规则(BaseRule, total=True):
     """兜底规则（无群号字段）"""
     pass
 
