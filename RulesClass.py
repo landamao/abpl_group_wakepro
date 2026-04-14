@@ -56,4 +56,4 @@ class 兜底规则(BaseRule, total=True):
 
 
 # 联合类型，用于表示任意一种规则字典
-Rule = Union[自定义规则, 兜底规则, dict]
+Rule = Union[自定义规则, 兜底规则]

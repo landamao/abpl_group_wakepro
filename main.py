@@ -6,7 +6,7 @@ from astrbot.api.all import (
 )
 from astrbot.api.event import filter
 from .RulesClass import *
-from .tools import 帮助文本, 获取所有指令, 概率通过
+from .Tools import 帮助文本, 获取所有指令, 概率通过
 
 op = time.perf_counter()
 
@@ -17,7 +17,7 @@ class 群自定义规则(Star):
 
         super().__init__(context)
         self.config = config
-
+        self.异常 = False
         # ======获取配置======
         try:
             self.规则列表: list[自定义规则] = config.get('自定义规则', [])
@@ -27,11 +27,13 @@ class 群自定义规则(Star):
             self.兜底规则['备注'] = "兜底规则"
             self.兜底开关 = self.兜底规则['开关']
             self.黑名单群聊 = [i.strip() for i in config['黑名单群聊']]
+            self.排除用户列表 = [i.strip() for i in config['排除用户列表']]
             config['黑名单群聊'] = self.黑名单群聊
         except Exception as e:
             logger.critical(
                 f"【群唤醒增强】获取配置出错，请尝试点击插件配置然后直接保存，或重新安装插件，或联系开发者\n{str(e)}",
                 exc_info=True)
+            self.异常 = True
         # ======获取系统配置======
         try:
             self.指令前缀 = tuple(context.get_config()["wake_prefix"])
@@ -83,129 +85,140 @@ class 群自定义规则(Star):
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=6666)
     async def 入口(self, event: AstrMessageEvent):
         """消息主入口"""
-        if not (消息链 := event.get_messages()):
-            return
-
-        event.set_extra("群唤醒拦截", False)
-
-        发送者 = event.get_sender_id()
-        群号 = event.get_group_id()
-        当前时间 = time.time()
-
-        if 群号 in self.黑名单群聊:
-            self.终止事件传播(event, {})
-            return
-
-        规则 = self.获取当前群规(event)
-        if not 规则:
-            return
-
-        终止, ret = self.指令屏蔽(event, 规则)
-        if 终止 and not event.is_admin():
-            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
-            self.终止事件传播(event, 规则)
-            return
-        if ret:
-            return
-
-        if isinstance(消息链[0], Json):
-            if 规则['拦截json']:
-                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了json拦截（外部分享）")
-                self.终止事件传播(event, 规则)
+        try:
+            if not (消息链 := event.get_messages()):
                 return
 
-        if isinstance(消息链[0], Poke):
-            if 规则['拦截戳一戳']:
-                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了戳一戳拦截")
-                self.终止事件传播(event, 规则)
-            return
+            event.set_extra("群唤醒拦截", False)
 
-        # 用户冷却检查（独立于活跃范围）
-        if 发送者 in self.用户冷却时间 and not event.is_admin():
-            if 当前时间 < self.用户冷却时间[发送者]:
-                logger.info(f"【群唤醒增强】用户「{发送者}」触发了冷却拦截")
-                self.终止事件传播(event, {})
+            发送者 = event.get_sender_id()
+            if 发送者 in self.排除用户列表:
                 return
+            群号 = event.get_group_id()
+            当前时间 = time.time()
+
+            if 群号 in self.黑名单群聊:
+                self.终止事件传播(event)
+                return
+
+            规则 = self.获取当前群规(event)
+            if not 规则:
+                return
+
+            终止, ret = self.指令屏蔽(event, 规则)
+            if 终止 and not event.is_admin():
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
+                self.终止事件传播(event, 规则)
+                return
+            if ret:
+                return
+
+            if isinstance(消息链[0], Json):
+                if 规则['拦截json']:
+                    logger.info(f"【群唤醒增强】「{规则['备注']}」触发了json拦截（外部分享）")
+                    self.终止事件传播(event, 规则)
+                    return
+
+            if isinstance(消息链[0], Poke):
+                if 规则['拦截戳一戳']:
+                    logger.info(f"【群唤醒增强】「{规则['备注']}」触发了戳一戳拦截")
+                    self.终止事件传播(event, 规则)
+                return
+
+            # 用户冷却检查（独立于活跃范围）
+            if 发送者 in self.用户冷却时间 and not event.is_admin():
+                if 当前时间 < self.用户冷却时间[发送者]:
+                    logger.info(f"【群唤醒增强】用户「{发送者}」触发了冷却拦截")
+                    self.终止事件传播(event)
+                    return
+                else:
+                    del self.用户冷却时间[发送者]
+
+            活跃范围 = 规则['活跃范围']
+
+            # ========== 活跃状态检查 ==========
+            if 活跃范围 == '群聊级':
+                # 群聊级活跃检查
+                if 群号 in self.群组活跃时间:
+                    if self.处理艾特引用(event, 规则):
+                        return
+                    if 当前时间 < self.群组活跃时间[群号]:
+                        上次唤醒 = self.群组上次唤醒时间.get(群号, 0)
+                        间隔 = self.群组活跃间隔.get(群号, self.兜底规则['活跃间隔'])
+                        if 当前时间 - 上次唤醒 < 间隔:
+                            logger.info(f"【群唤醒增强】「{规则['备注']}」群聊级活跃期内触发冷却拦截")
+                            self.终止事件传播(event, 规则)
+                            return
+                        else:
+                            logger.info(f"【群唤醒增强】「{规则['备注']}」群聊级活跃期内唤醒")
+                            self.唤醒(event, 规则)
+                            return
+                    else:
+                        del self.群组活跃时间[群号]
+                        self.群组上次唤醒时间.pop(群号, None)
             else:
-                del self.用户冷却时间[发送者]
-
-        活跃范围 = 规则['活跃范围']
-
-        # ========== 活跃状态检查 ==========
-        if 活跃范围 == '群聊级':
-            # 群聊级活跃检查
-            if 群号 in self.群组活跃时间:
-                if self.处理艾特引用(event, 规则):
-                    return
-                if 当前时间 < self.群组活跃时间[群号]:
-                    上次唤醒 = self.群组上次唤醒时间.get(群号, 0)
-                    间隔 = self.群组活跃间隔.get(群号, self.兜底规则['活跃间隔'])
-                    if 当前时间 - 上次唤醒 < 间隔:
-                        logger.info(f"【群唤醒增强】「{规则['备注']}」群聊级活跃期内触发冷却拦截")
-                        self.终止事件传播(event, 规则)
+                # 用户级活跃检查
+                if 发送者 in self.用户活跃时间:
+                    if self.处理艾特引用(event, 规则):
                         return
+                    if 当前时间 < self.用户活跃时间[发送者]:
+                        上次唤醒 = self.用户上次唤醒时间.get(发送者, 0)
+                        间隔 = 规则['活跃间隔']
+                        if 间隔 == -1:
+                            间隔 = self.兜底规则['活跃间隔']
+                        if 当前时间 - 上次唤醒 < 间隔:
+                            logger.info(f"【群唤醒增强】「{规则['备注']}」用户级活跃期内触发冷却拦截")
+                            self.终止事件传播(event, 规则)
+                            return
+                        else:
+                            logger.info(f"【群唤醒增强】「{规则['备注']}」用户级活跃期内唤醒")
+                            self.唤醒(event, 规则)
+                            return
                     else:
-                        logger.info(f"【群唤醒增强】「{规则['备注']}」群聊级活跃期内唤醒")
-                        self.唤醒(event, 规则)
-                        return
-                else:
-                    del self.群组活跃时间[群号]
-                    self.群组上次唤醒时间.pop(群号, None)
-        else:
-            # 用户级活跃检查
-            if 发送者 in self.用户活跃时间:
-                if self.处理艾特引用(event, 规则):
-                    return
-                if 当前时间 < self.用户活跃时间[发送者]:
-                    上次唤醒 = self.用户上次唤醒时间.get(发送者, 0)
-                    间隔 = 规则['活跃间隔']
-                    if 间隔 == -1:
-                        间隔 = self.兜底规则['活跃间隔']
-                    if 当前时间 - 上次唤醒 < 间隔:
-                        logger.info(f"【群唤醒增强】「{规则['备注']}」用户级活跃期内触发冷却拦截")
-                        self.终止事件传播(event, 规则)
-                        return
-                    else:
-                        logger.info(f"【群唤醒增强】「{规则['备注']}」用户级活跃期内唤醒")
-                        self.唤醒(event, 规则)
-                        return
-                else:
-                    del self.用户活跃时间[发送者]
-                    self.用户上次唤醒时间.pop(发送者, None)
+                        del self.用户活跃时间[发送者]
+                        self.用户上次唤醒时间.pop(发送者, None)
 
-        # ========== 正常唤醒流程（昵称、艾特、概率等） ==========
-        消息文本 = event.get_message_str()
+            # ========== 正常唤醒流程（昵称、艾特、概率等） ==========
+            消息文本 = event.get_message_str()
 
-        if any(_ in 消息文本 for _ in 规则['昵称唤醒']):
-            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了昵称唤醒")
-            self.唤醒(event, 规则)
-            return
-
-        if 规则['前缀拦截'] and any(消息文本.startswith(_) for _ in 规则['前缀拦截']):
-            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了前缀拦截")
-            self.终止事件传播(event, 规则)
-            return
-
-        if 规则['含有拦截'] and any(_ in 消息文本 for _ in 规则['含有拦截']):
-            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了含有拦截")
-            self.终止事件传播(event, 规则)
-            return
-
-        if self.处理艾特引用(event, 规则):
-            return
-
-        if 规则['其余拦截']:
-            if event.is_admin():
-                return
-            logger.info(f"【群唤醒增强】「{规则['备注']}」触发了其余拦截")
-            self.终止事件传播(event, 规则)
-            return
-
-        if 规则['概率唤醒']:
-            if 概率通过(消息链, 规则['概率唤醒'], 规则['概率方式']):
+            if any(_ in 消息文本 for _ in 规则['昵称唤醒']):
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了昵称唤醒")
                 self.唤醒(event, 规则)
+                return
 
-        return
+            if 规则['前缀拦截'] and any(消息文本.startswith(_) for _ in 规则['前缀拦截']):
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了前缀拦截")
+                self.终止事件传播(event, 规则)
+                return
+
+            if 规则['含有拦截'] and any(_ in 消息文本 for _ in 规则['含有拦截']):
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了含有拦截")
+                self.终止事件传播(event, 规则)
+                return
+
+            if self.处理艾特引用(event, 规则):
+                return
+
+            if 规则['其余拦截']:
+                if event.is_admin():
+                    return
+                logger.info(f"【群唤醒增强】「{规则['备注']}」触发了其余拦截")
+                self.终止事件传播(event, 规则)
+                return
+
+            if 规则['概率唤醒']:
+                if 概率通过(消息链, 规则['概率唤醒'], 规则['概率方式']):
+                    logger.info(f"【群唤醒增强】「{规则['备注']}」触发了概率唤醒")
+                    self.唤醒(event, 规则)
+            return
+        except (KeyError, AttributeError) as e:
+            if self.异常:
+                logger.error(
+                    "【群唤醒增强】运行出错，原因：插件配置未正确加载。请进入插件配置页面，直接点击【保存】一次即可恢复正常。如未恢复正常，请重新安装插件")
+                return
+            logger.error(f"【群唤醒增强】消息处理出现错误：{e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"【群唤醒增强】消息处理出现错误：{e}", exc_info=True)
 
     def 获取当前群规(self, event: AstrMessageEvent) -> 自定义规则 | 兜底规则 | None:
         群号 = event.get_group_id()
@@ -234,7 +247,7 @@ class 群自定义规则(Star):
                 return
             if not 规则['强力拦截']:
                 return
-            终止, ret = self.指令屏蔽(event, 规则)
+            终止, ret = self.指令屏蔽(event, 规则, True)
             if 终止 and not event.is_admin():
                 logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
                 self.终止事件传播(event, 规则)
@@ -251,32 +264,56 @@ class 群自定义规则(Star):
             else:
                 logger.info(
                     f"【群唤醒增强】群{规则['备注']}，用户「{event.get_sender_name()}」，消息 | {event.get_message_outline()} | 唤醒了llm")
+        except (KeyError, AttributeError) as e:
+            if self.异常:
+                logger.error(
+                    "【群唤醒增强】运行出错，原因：插件配置未正确加载。请进入插件配置页面，直接点击【保存】一次即可恢复正常。如未恢复正常，请重新安装插件")
+                return
+            logger.error(f"【群唤醒增强】出错：\n{e}", exc_info=True)
         except Exception as e:
             logger.error(f"【群唤醒增强】拦截出错：\n{e}", exc_info=True)
 
     @filter.on_llm_response()
     async def llm请求后(self, event: AstrMessageEvent, _):
         """当有 LLM 请求后的事件"""
-        event.set_extra("群唤醒llm请求后", True)
-        规则 = self.获取当前群规(event)
-        if not 规则:
-            return
-        if 规则['活跃方式'] == 'llm请求后':
-            self.记录活跃(event, 规则)
+        try:
+            event.set_extra("群唤醒llm请求后", True)
+            规则 = self.获取当前群规(event)
+            if not 规则:
+                return
+            if 规则['活跃方式'] == 'llm请求后':
+                self.记录活跃(event, 规则)
+        except (KeyError, AttributeError) as e:
+            if self.异常:
+                logger.error(
+                    "【群唤醒增强】运行出错，原因：插件配置未正确加载。请进入插件配置页面，直接点击【保存】一次即可恢复正常。如未恢复正常，请重新安装插件")
+                return
+            logger.error(f"【群唤醒增强】出错：\n{e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"【群唤醒增强】出错：\n{e}", exc_info=True)
 
     @filter.after_message_sent()
     async def 发送消息后(self, event: AstrMessageEvent):
         """在消息发送后的事件"""
-        if not event.get_extra("群唤醒llm请求后", False):
-            return
-        if event.get_extra("群唤醒已处理", False):
-            return
-        event.set_extra("群唤醒已处理", True)
-        规则 = self.获取当前群规(event)
-        if not 规则:
-            return
-        if 规则['活跃方式'] == '发送消息后':
-            self.记录活跃(event, 规则)
+        try:
+            if not event.get_extra("群唤醒llm请求后", False):
+                return
+            if event.get_extra("群唤醒已处理", False):
+                return
+            event.set_extra("群唤醒已处理", True)
+            规则 = self.获取当前群规(event)
+            if not 规则:
+                return
+            if 规则['活跃方式'] == '发送消息后':
+                self.记录活跃(event, 规则)
+        except (KeyError, AttributeError) as e:
+            if self.异常:
+                logger.error(
+                    "【群唤醒增强】运行出错，原因：插件配置未正确加载。请进入插件配置页面，直接点击【保存】一次即可恢复正常。如未恢复正常，请重新安装插件")
+                return
+            logger.error(f"【群唤醒增强】出错：\n{e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"【群唤醒增强】出错：\n{e}", exc_info=True)
 
     def 记录活跃(self, event: AstrMessageEvent, 规则):
         """根据活跃范围记录群组或用户的活跃状态"""
@@ -299,7 +336,9 @@ class 群自定义规则(Star):
             self.用户上次唤醒时间[event.get_sender_id()] = 当前时间
 
     @staticmethod
-    def 终止事件传播(event: AstrMessageEvent, 规则: Rule):
+    def 终止事件传播(event: AstrMessageEvent, 规则: Rule = None):
+        if 规则 is None:
+            规则 = {}
         if 规则.get('强力拦截', False):
             event.set_extra("群唤醒拦截", True)
         logger.info(f"【群唤醒增强】「{规则.get('备注', event.get_group_id())}」终止了事件传播")
@@ -352,7 +391,7 @@ class 群自定义规则(Star):
             self.用户冷却时间[event.get_sender_id()] = time.time() + 唤醒CD
             logger.info(f"【群唤醒增强】用户「{event.get_sender_name()}（{event.get_sender_id()}）」将冷却{唤醒CD}秒")
 
-    def 指令屏蔽(self, event: AstrMessageEvent, 规则) -> tuple[bool, bool]:
+    def 指令屏蔽(self, event: AstrMessageEvent, 规则, llm请求前:bool=False) -> tuple[bool, bool]:
         """检查指令是否被屏蔽，return终止，return"""
         指令文本 = event.get_message_str().strip().split()
         指令文本 = 指令文本[0] if 指令文本 else ""
@@ -383,8 +422,11 @@ class 群自定义规则(Star):
             elif 指令文本 not in 规则['启用的指令']:
                 return True, ret
 
-        if 使用前缀 and 规则['禁前唤醒'] and (指令文本 not in self.所有指令集合):
-            return True, ret
+        if 使用前缀 and 规则['禁前唤醒']:
+            if llm请求前:
+                return True, ret
+            elif 指令文本 not in self.所有指令集合:
+                return True, ret
 
         return False, ret
 
