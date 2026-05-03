@@ -27,7 +27,6 @@ class 群自定义规则(Star):
             self.兜底规则['备注'] = "兜底规则"
             self.兜底开关 = self.兜底规则['开关']
             self.黑名单群聊 = [i.strip() for i in config['黑名单群聊']]
-            self.排除用户列表 = [i.strip() for i in config['排除用户列表']]
             config['黑名单群聊'] = self.黑名单群聊
         except Exception as e:
             logger.critical(
@@ -91,9 +90,6 @@ class 群自定义规则(Star):
 
             event.set_extra("群唤醒拦截", False)
 
-            发送者 = event.get_sender_id()
-            if 发送者 in self.排除用户列表:
-                return
             群号 = event.get_group_id()
             当前时间 = time.time()
 
@@ -124,6 +120,8 @@ class 群自定义规则(Star):
                     logger.info(f"【群唤醒增强】「{规则['备注']}」触发了戳一戳拦截")
                     self.终止事件传播(event, 规则)
                 return
+
+            发送者 = event.get_sender_id()
 
             # 用户冷却检查（独立于活跃范围）
             if 发送者 in self.用户冷却时间 and not event.is_admin():
