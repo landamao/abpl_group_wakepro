@@ -43,6 +43,8 @@ class BaseRule(TypedDict, total=True):
 
     # 其他
     强力拦截: bool
+    拦截空消息链事件: bool
+    禁用功能对管理员生效: bool
 
 
 class 自定义规则(BaseRule, total=True):

@@ -89,6 +89,9 @@ class 群自定义规则(Star):
         """消息主入口"""
         try:
             if not (消息链 := event.get_messages()):
+                规则_tmp = self.获取当前群规(event)
+                if 规则_tmp and 规则_tmp.get('拦截空消息链事件', False):
+                    self.终止事件传播(event, 规则_tmp)
                 return
 
             event.set_extra("群唤醒拦截", False)
@@ -133,7 +136,7 @@ class 群自定义规则(Star):
                 return
 
             终止, ret = self.指令屏蔽(event, 规则)
-            if 终止 and not event.is_admin():
+            if 终止 and (not event.is_admin() or 规则.get('禁用功能对管理员生效', False)):
                 logger.info(f"【群唤醒增强】「{规则['备注']}」触发了指令拦截")
                 self.终止事件传播(event, 规则)
                 return
@@ -153,7 +156,7 @@ class 群自定义规则(Star):
                 return
 
             # 用户冷却检查（独立于活跃范围）
-            if 发送者 in self.用户冷却时间 and not event.is_admin():
+            if 发送者 in self.用户冷却时间 and (not event.is_admin() or 规则.get('禁用功能对管理员生效', False)):
                 if 当前时间 < self.用户冷却时间[发送者]:
                     logger.info(f"【群唤醒增强】用户「{发送者}」触发了冷却拦截")
                     self.终止事件传播(event)
@@ -227,7 +230,7 @@ class 群自定义规则(Star):
                 return
 
             if 规则['其余拦截']:
-                if event.is_admin():
+                if event.is_admin() and not 规则.get('禁用功能对管理员生效', False):
                     return
                 logger.info(f"【群唤醒增强】「{规则['备注']}」触发了其余拦截")
                 self.终止事件传播(event, 规则)
@@ -420,7 +423,7 @@ class 群自定义规则(Star):
             self.记录活跃(event, 规则)
 
         # 设置用户冷却（唤醒CD）
-        if event.is_admin():
+        if event.is_admin() and not 规则.get('禁用功能对管理员生效', False):
             return
         唤醒CD = 规则['唤醒CD']
         if 唤醒CD == -1:
