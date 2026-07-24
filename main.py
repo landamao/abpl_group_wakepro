@@ -6,7 +6,7 @@ from astrbot.api.all import (
 )
 from astrbot.api.event import filter
 from .RulesClass import *
-from .Tools import 帮助文本, 获取所有指令, 概率通过
+from .Tools import 帮助文本, 获取所有指令, 概率通过, 解析黑白名单, 检测黑白名单
 
 op = time.perf_counter()
 
@@ -105,12 +105,22 @@ class 群自定义规则(Star):
 
             发送者 = event.get_sender_id()
 
+            规则 = self.获取当前群规(event)
+            if not 规则:
+                return
+
+            # ========== 用户黑白名单检查 ==========
+            if not self.用户名单通过(发送者, 规则):
+                if not event.is_admin() or 规则.get('禁用功能对管理员生效', False):
+                    logger.info(f"【群唤醒增强】「{规则['备注']}」用户「{发送者}」未通过用户黑白名单")
+                    self.终止事件传播(event, 规则)
+                    return
+
             # ========== 用户自定义活跃检查 ==========
             自定义活跃键 = (群号, 发送者)
             if 自定义活跃键 in self.用户自定义活跃时间:
                 if 当前时间 < self.用户自定义活跃时间[自定义活跃键]:
-                    规则_tmp = self.获取当前群规(event)
-                    间隔 = self.兜底规则['活跃间隔'] if not 规则_tmp else 规则_tmp['活跃间隔']
+                    间隔 = 规则['活跃间隔']
                     if 间隔 == -1:
                         间隔 = self.兜底规则['活跃间隔']
                     上次唤醒 = self.用户上次唤醒时间.get(发送者, 0)
@@ -130,10 +140,6 @@ class 群自定义规则(Star):
                 else:
                     del self.用户自定义活跃时间[自定义活跃键]
                     # 不删时长，用户可以再次被唤醒后继续使用
-
-            规则 = self.获取当前群规(event)
-            if not 规则:
-                return
 
             终止, ret = self.指令屏蔽(event, 规则)
             if 终止 and (not event.is_admin() or 规则.get('禁用功能对管理员生效', False)):
@@ -249,6 +255,11 @@ class 群自定义规则(Star):
             logger.error(f"【群唤醒增强】消息处理出现错误：{e}", exc_info=True)
         except Exception as e:
             logger.error(f"【群唤醒增强】消息处理出现错误：{e}", exc_info=True)
+
+    def 用户名单通过(self, 发送者, 规则) -> bool:
+        """检查用户是否通过当前规则的用户黑白名单"""
+        原列表 = 规则.get('用户黑白名单', ['all']) or ['all']
+        return 检测黑白名单(str(发送者), 解析黑白名单(原列表))
 
     def 获取当前群规(self, event: AstrMessageEvent) -> 自定义规则 | 兜底规则 | None:
         群号 = event.get_group_id()
@@ -753,6 +764,7 @@ class 群自定义规则(Star):
                 f"• 禁用系统指令：{'✅' if 规则['禁用系统指令'] else '❌'}",
                 f"• 禁用的指令：{', '.join(规则['禁用的指令']) or '未配置'}",
                 f"• 启用的指令：{', '.join(规则['启用的指令']) or '未配置'}",
+                f"• 用户黑白名单：{', '.join(规则.get('用户黑白名单', ['all'])) or '未配置'}",
                 f"• 强力拦截：{'✅' if 规则['强力拦截'] else '❌'}"]
         if len(规则.get('群号', [])) > 1:
             if 原群号 is None:

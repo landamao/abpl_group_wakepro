@@ -5,6 +5,85 @@ from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.filter.command_group import CommandGroupFilter, CommandFilter
 
 
+def 解析黑白名单(原列表: list[str]|set[str], 通配符=None) -> tuple[set[str], set[str]]:
+    """
+    解析原始访问控制列表，返回标准化的白名单和黑名单。
+
+    Args:
+        原列表: 原始字符串列表，如 ["all", "/admin", "user", "/all"]
+        通配符: 匹配的通配符，当匹配到通配符时，列表类型使用第一个
+    Returns:
+        tuple[set, set]: 顺序为黑名单，白名单
+    """
+    if 通配符 is None:
+        通配符 = ['*', 'all']
+    # 跳过非字符串和空字符串
+    原列表 = [ i.strip() for i in 原列表 if isinstance(i, str) and i.strip() ]
+    黑名单 = []
+    白名单 = []
+    if 通配符:
+        if isinstance(通配符, (list, tuple)):
+            t = 通配符[0]
+            tl = 通配符
+        elif isinstance(通配符, str):
+            t = 通配符
+            tl = [通配符]
+        else:
+            raise ValueError("通配符类型错误，应为list or str")
+    else:
+        tl = []
+
+    for i in 原列表:
+
+        # 黑名单判断（以 / 开头）
+        if i.startswith('/'):
+            i = i[1:]  # 去掉前缀 /
+            if not i:
+                continue
+            if i in tl:
+                return {t}, set()
+            黑名单.append(i)
+        else:
+            白名单.append(i)
+
+    # 规范化白名单
+    if any(i in 白名单 for i in tl):
+        白名单 = [t]
+
+    白名单 = [ i for i in 白名单 if i not in 黑名单]
+
+    return set(黑名单), set(白名单)
+
+def 检测黑白名单(值:str, 黑白名单:tuple[set[str], set[str]], 通配符=None) -> bool:
+    if 通配符 is None:
+        通配符 = ['*', 'all']
+    黑名单 = 黑白名单[0]
+    白名单 = 黑白名单[1]
+    if 通配符:
+        if isinstance(通配符, (list, tuple)):
+            t = 通配符[0]
+        elif isinstance(通配符, str):
+            t = 通配符
+        else:
+            raise ValueError("通配符类型错误，应为list or str")
+    else:
+        t = ''
+    if not (黑名单 or 白名单):
+        return False
+    if 黑名单:
+        if t in 黑名单:
+            return False
+        if 值 in 黑名单:
+            return False
+    if 白名单:
+        if t in 白名单:
+            return True
+        if 值 in 白名单:
+            return True
+    # 规范使用通配符，为空则拒绝
+    return False
+
+
 def 获取所有指令(额外指令) -> list:
     # 遍历所有注册的处理器获取所有命令，包括别名
     l指令 = []
@@ -109,14 +188,18 @@ def 概率通过(消息链, 概率值, 启用列表) -> bool:
   - 禁用系统指令 (bool)    : 禁止使用系统指令（如 /help）
   - 禁用的指令 (list)      : 黑名单指令，["0所有"]表示禁用所有指令
   - 启用的指令 (list)      : 白名单指令，["0所有"]表示放行所有指令
+【用户控制】
+  - 用户黑白名单 (list)    : 默认["all"]；/前缀禁用，all/*代表所有用户
+    例：all,/123456（允许所有但禁用123456）；123456,234567（仅允许这两人）
 
 --- 特殊值说明 ---
 • 兜底规则：未配置自定义规则的群自动生效的规则
 • -1 ：表示继承兜底规则的对应数值（仅适用于时间类配置）
 • 0所有 ：在禁用/启用指令列表中使用，表示全部指令
+• all/* ：在用户黑白名单中使用，表示全部用户
 • list类型可以使用 add/del/rep 参数
 --- 注意事项 ---
-• 管理员不受大部分拦截规则影响
+• 管理员不受大部分拦截规则影响（含用户黑白名单，除非开启“禁用功能对管理员生效”）
 • 修改配置后立即生效，无需重启
 • 群号参数为字符串，如 "123456789"，兜底规则用 "兜底规则"
         """.strip()
