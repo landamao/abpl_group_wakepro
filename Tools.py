@@ -1,5 +1,4 @@
 import random
-from pypinyin import lazy_pinyin
 from astrbot.api.all import Plain, Json, Image
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.filter.command_group import CommandGroupFilter, CommandFilter
@@ -105,7 +104,9 @@ def 获取所有指令(额外指令) -> list:
         else:
             英文指令.append(指令)
     # 排序
-    中文指令.sort(key=lambda x: lazy_pinyin(x))
+    # 中文按码点排序（原先依赖 pypinyin 的拼音序，该库导入即占约 50 MB，
+    # 仅为一次排序不值当，故移除；列表顺序本身不影响指令匹配）
+    中文指令.sort()
     英文指令.sort(key=lambda x: x.lower())
     # 合并列表
     所有指令 = 中文指令 + 英文指令

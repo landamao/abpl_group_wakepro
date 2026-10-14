@@ -21,9 +21,8 @@
 
 1. 在 `AstrBot/plugins/` 下新建目录 `群唤醒增强`
 2. 将插件文件放入该目录
-3. 安装依赖：`pip install pypinyin`
-4. 重启 AstrBot
-5. 在 WebUI 插件配置页面进行配置（或使用管理员指令）
+3. 重启 AstrBot
+4. 在 WebUI 插件配置页面进行配置（或使用管理员指令）
 
 ---
 
